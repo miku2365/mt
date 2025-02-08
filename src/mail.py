@@ -3,6 +3,7 @@
 import os
 import smtplib
 from email.mime.text import MIMEText
+from email.utils import formataddr
 from email.header import Header
 from functools import wraps
 
@@ -14,7 +15,7 @@ class Mail:
         self.mail_pass = mail_password if mail_password else os.environ.get("MAIL_PASS")  # 邮箱登录授权码
         self.sender = mail_username if mail_username else os.environ.get("SENDER")  # 自己的邮箱地址
         self.receivers = receivers if receivers else os.environ.get("RECEIVERS")  # 收件人的邮箱地址，不可多个
-        self.port = int(os.environ.get("MAIL_PORT")) if int(os.environ.get("MAIL_PORT")) else port  # 服务器端口
+        self.port = int(os.environ.get("MAIL_PORT")) if os.environ.get("MAIL_PORT") else port  # 服务器端口
 
     def check(func):
         """检测环境的装饰器"""
@@ -39,8 +40,11 @@ class Mail:
         """
         message = MIMEText(content, 'html', 'utf-8')
 
-        message['From'] = Header("自动签到提醒", 'utf-8')
-        message['To'] = Header("你", 'utf-8')
+        # 设置正确的 From 头字段为 昵称 <邮箱地址>
+        nickname = "自动签到提醒"
+        from_header = formataddr((nickname, self.sender))
+        message['From'] = from_header
+        message['To'] = formataddr(("你", self.receivers))
 
         message['Subject'] = Header(subject, 'utf-8')
         smtpObj = None
@@ -55,11 +59,19 @@ class Mail:
             print('邮件发送成功')
             return True
         except smtplib.SMTPException as e:
-            print('邮件发送失败')
+            print(f'邮件发送失败: {e}')
+            return False
+        except Exception as e:
+            print(f'发生意外错误: {e}')
             return False
         finally:
             if smtpObj:
-                smtpObj.quit()
+                try:
+                    smtpObj.quit()
+                except smtplib.SMTPServerDisconnected:
+                    print("连接已断开，无需再次关闭")
+                except Exception as e:
+                    print(f"关闭连接时出错: {e}")
 
     check = staticmethod(check)
 
